@@ -1,0 +1,48 @@
+name: Windows Golden Image Build (Packer)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'packer-config/windows/**' # Trigger on config changes
+  workflow_dispatch: # Manual trigger for ad-hoc builds
+
+jobs:
+  build_golden_image:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_VERSION: 1.0.0-${{ github.sha }} # Use Git SHA for versioning
+
+    steps:
+      - name: ⬇️ Checkout Code
+        uses: actions/checkout@v4
+
+      - name: ☁️ Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: "3457b78f-cc64-402b-b687-8628dc864bba"
+          tenant-id: "edf442f5-b994-4c86-a131-b42b03a16c95"
+          subscription-id: "af05ad92-8ea3-4354-9150-a0e2f06eda8a"
+
+      - name: 📦 Set up Packer
+        uses: hashicorp/setup-packer@v1
+        with:
+          version: 'latest'
+
+      - name: ⚙️ Build and Harden Image
+        id: packer_build
+        run: |
+          # The Packer command executes all Builders, Provisioners (CIS, tools), and Post-processors (SIG)
+          packer build -force \
+            -var "image_version="${{ env.IMAGE_VERSION }}"" \
+            packer-config/windows/windows-golden-image.pkr.hcl
+
+      # STEP 6: Publish the compliance report
+      - name: 📤 Upload Compliance Report Artifact
+        if: always() # Ensure this runs even if the build fails, for forensics
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-cis-report-${{ env.IMAGE_VERSION }}
+          # This path assumes your Packer script successfully copied the report locally
+          path: ./reports/cis-report-${{ env.IMAGE_VERSION }}.pdf 
+          retention-days: 90
